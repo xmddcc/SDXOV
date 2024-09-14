@@ -45,7 +45,7 @@ def apply_compile_to_model(sd_model, function, options, op=None):
                 sd_model.prior_prior.clip_txt_pooled_mapper = sd_model.prior_pipe.prior.clip_txt_pooled_mapper = backup_clip_txt_pooled_mapper
     if "VAE" in options:
         if hasattr(sd_model, 'vae') and hasattr(sd_model.vae, 'decode'):
-            sd_model.vae = function(sd_model.vae)
+            sd_model.vae.decode = function(sd_model.vae.decode)
         if hasattr(sd_model, 'movq') and hasattr(sd_model.movq, 'decode'):
             sd_model.movq = function(sd_model.movq)
         if hasattr(sd_model, 'vqgan') and hasattr(sd_model.vqgan, 'decode'):
@@ -246,22 +246,14 @@ def compile_torch(sd_model):
         torch._dynamo.reset() # pylint: disable=protected-access
         shared.log.debug(f"Model compile available backends: {torch._dynamo.list_backends()}") # pylint: disable=protected-access
 
-        def torch_compile_model(model):
-            if model.device.type != "meta":
-                return_device = model.device
-                model = torch.compile(model.to(devices.device),
-                    mode=shared.opts.cuda_compile_mode,
-                    backend=shared.opts.cuda_compile_backend,
-                    fullgraph=shared.opts.cuda_compile_fullgraph
-                ).to(return_device)
-            else:
-                model = torch.compile(model,
-                    mode=shared.opts.cuda_compile_mode,
-                    backend=shared.opts.cuda_compile_backend,
-                    fullgraph=shared.opts.cuda_compile_fullgraph
-                )
-            devices.torch_gc()
-            return model
+        def torch_compile_model(model):            
+            model = torch.compile(model,
+                mode=shared.opts.cuda_compile_mode,
+                backend=shared.opts.cuda_compile_backend,
+                fullgraph=shared.opts.cuda_compile_fullgraph
+            )
+        devices.torch_gc()
+        return model
 
         if shared.opts.cuda_compile_backend == "openvino_fx":
             sd_model = optimize_openvino(sd_model)
